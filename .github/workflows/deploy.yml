@@ -3,6 +3,12 @@ name: Deploy to VPS
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'plugins/**'
+      - 'themes/**'
+      - 'uploads/**'
+      - '.github/workflows/deploy.yml'
+      - 'plugins/hardloop-manager/migrations/**'
 
 jobs:
   deploy:
@@ -13,21 +19,66 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Set up SSH key
+        shell: bash
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "SSH_KEY length=$(printf '%s' "${{ secrets.VPS_SSH_KEY }}" | wc -c) characters"
+          # write private key, strip any CRs
+          printf '%s' "${{ secrets.VPS_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} -p 2200 >> ~/.ssh/known_hosts
+          ssh-keyscan -p 2200 -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
       - name: Rsync wp-content to VPS
         run: |
-          rsync -avz -e "ssh -p 2200" \
+          rsync -avz -e "ssh -i ~/.ssh/id_rsa -p 2200" \
             ./plugins/ \
             ./themes/ \
             ./uploads/ \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/html/wp-content/
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/
 
       - name: Flush cache & rewrite on VPS
         run: |
-          ssh -p 2200 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "docker compose exec wordpress bash -lc 'wp cache flush --allow-root && wp rewrite flush --hard --allow-root'"
+          ssh -i ~/.ssh/id_rsa -p 2200 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "cd /home/vhm/public_html && wp cache flush --allow-root && wp rewrite flush --hard --allow-root"
+
+  db-migrate:
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: ${{ contains(join(github.event.head_commit.modified,','), 'plugins/hardloop-manager/migrations/') || contains(join(github.event.head_commit.added,','), 'plugins/hardloop-manager/migrations/') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up SSH key
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          echo "SSH_KEY length=$(printf '%s' "${{ secrets.VPS_SSH_KEY }}" | wc -c) characters"
+          printf '%s' "${{ secrets.VPS_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p 2200 -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Run DB migrations on VPS
+        run: |
+          ssh -i ~/.ssh/id_rsa -p 2200 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash << EOF
+            set -euo pipefail
+            cd /home/vhm/public_html
+
+            echo " - Applying SQL migrations…"
+            for f in plugins/hardloop-manager/migrations/*.sql; do
+              if [ -f "\$f" ]; then
+                echo "   > \$f"
+                wp db query "\$(cat \"\$f\")" --allow-root
+              fi
+            done
+
+            echo " - Applying PHP migrations…"
+            for f in plugins/hardloop-manager/migrations/*.php; do
+              if [ -f "\$f" ]; then
+                echo "   > \$f"
+                wp eval-file "\$f" --allow-root
+              fi
+            done
+
+            echo "✅ Migrations complete."
+          EOF
