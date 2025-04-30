@@ -2,110 +2,77 @@ name: Deploy to VPS
 
 on:
   push:
-    branches: [ main ]
-    paths:
-      - 'plugins/**'
-      - 'themes/**'
-      - 'uploads/**'
-      - '.github/workflows/deploy.yml'
-      - 'plugins/hardloop-manager/migrations/**'
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Set up SSH key and known_hosts
-        shell: bash
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
+    - name: Set up SSH key
+      run: |
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        # decode your Base64-encoded private key into id_rsa
+        printf '%s' "${{ secrets.VPS_SSH_KEY_B64 }}" | tr -d '\r' | base64 -d > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        # add the host to known_hosts
+        ssh-keyscan -p 2200 -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+        chmod 644 ~/.ssh/known_hosts
 
-          # Decode Base64-encoded private key into id_rsa, strip CRs, no extra newline
-          printf '%s' "${{ secrets.VPS_SSH_KEY_B64 }}" | tr -d '\r' | base64 -d > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+    - name: Build Docker image locally (sanity check)
+      run: docker build . -t vhm-wordpress
 
-          # Scan and trust VPS host key on port 2200
-          ssh-keyscan -p 2200 -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
+    - name: Ensure remote wp-content directories (with sudo)
+      run: |
+        ssh -o StrictHostKeyChecking=no \
+            -i ~/.ssh/id_rsa -p 2200 \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash << 'ENDSSH'
+          set -e
+          sudo mkdir -p /home/vhm/public_html/wp-content/plugins
+          sudo mkdir -p /home/vhm/public_html/wp-content/themes
+          sudo mkdir -p /home/vhm/public_html/wp-content/uploads
+          sudo mkdir -p /home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations
+          sudo chown -R vsm:vsm /home/vhm/public_html/wp-content
+          sudo chmod -R 775 /home/vhm/public_html/wp-content
+        ENDSSH
 
-      - name: Ensure local folders for rsync
-        run: |
-          mkdir -p plugins
-          mkdir -p themes
-          mkdir -p uploads
-          mkdir -p plugins/hardloop-manager/migrations
+    - name: Rsync wp-content to VPS
+      run: |
+        rsync -avz \
+          --delete \
+          --exclude='.git/' \
+          --exclude='.github/' \
+          -e "ssh -i ~/.ssh/id_rsa -p 2200" \
+          ./wp-content/ \
+          vsm@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/
 
-      - name: Ensure remote wp-content directories
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash << 'ENDSSH'
-            set -e
-            mkdir -p /home/vhm/public_html/wp-content/plugins
-            mkdir -p /home/vhm/public_html/wp-content/themes
-            mkdir -p /home/vhm/public_html/wp-content/uploads
-            mkdir -p /home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations
-            chown -R vsm:vsm /home/vhm/public_html/wp-content
-            chmod -R 775 /home/vhm/public_html/wp-content
-          ENDSSH
+    - name: Rsync migrations to VPS
+      run: |
+        rsync -avz \
+          --delete \
+          -e "ssh -i ~/.ssh/id_rsa -p 2200" \
+          ./wp-content/plugins/hardloop-manager/migrations/ \
+          vsm@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations/
 
-      - name: Rsync wp-content to VPS
-        run: |
-          rsync -avz -e "ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200" \
-            ./plugins/ \
-            ./themes/ \
-            ./uploads/ \
-            ./plugins/hardloop-manager/migrations/ \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/
+    - name: Run WP-CLI tasks on VPS
+      run: |
+        ssh -o StrictHostKeyChecking=no \
+            -i ~/.ssh/id_rsa -p 2200 \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash << 'ENDSSH'
+          set -e
+          cd /home/vhm/public_html
 
-      - name: Flush cache & rewrite on VPS
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "cd /home/vhm/public_html && wp cache flush --allow-root && wp rewrite flush --hard --allow-root"
+          # ensure plugin active & permalinks flushed
+          wp plugin activate hardloop-manager --allow-root || true
+          wp rewrite flush --hard --allow-root
 
-  db-migrate:
-    needs: deploy
-    runs-on: ubuntu-latest
-    if: ${{ contains(join(github.event.head_commit.modified,','), 'plugins/hardloop-manager/migrations/') || contains(join(github.event.head_commit.added,','), 'plugins/hardloop-manager/migrations/') }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up SSH key and known_hosts
-        shell: bash
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-
-          printf '%s' "${{ secrets.VPS_SSH_KEY_B64 }}" | tr -d '\r' | base64 -d > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-
-          ssh-keyscan -p 2200 -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
-
-      - name: Run DB migrations on VPS
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash << EOF
-            set -euo pipefail
-            cd /home/vhm/public_html
-
-            echo " - Applying SQL migrations…"
-            for f in plugins/hardloop-manager/migrations/*.sql; do
-              if [ -f "\$f" ]; then
-                echo "   > \$f"
-                wp db query "\$(cat \"\$f\")" --allow-root
-              fi
-            done
-
-            echo " - Applying PHP migrations…"
-            for f in plugins/hardloop-manager/migrations/*.php; do
-              if [ -f "\$f" ]; then
-                echo "   > \$f"
-                wp eval-file "\$f" --allow-root
-              fi
-            done
-
-            echo "✅ Migrations complete."
-          EOF
+          # run the import migration
+          wp option delete hardloop_manager_imported_gac --allow-root || true
+          wp eval-file wp-content/plugins/hardloop-manager/migrations/2025-05-02-import-gac-hardlopers.php --allow-root
+        ENDSSH# dummy trigger wo 30 apr 2025 22:05:29 CEST
