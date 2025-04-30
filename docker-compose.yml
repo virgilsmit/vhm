@@ -24,17 +24,5 @@ services:
     volumes:
       - ./:/var/www/html/wp-content
 
-  phpmyadmin:
-    image: arm64v8/phpmyadmin:latest
-    depends_on:
-      - db
-    environment:
-      PMA_HOST: db
-      PMA_USER: wp
-      PMA_PASSWORD: wppass
-      UPLOAD_LIMIT: 64M
-    ports:
-      - "8081:80"
-
 volumes:
   db_data:
