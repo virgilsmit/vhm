@@ -1,0 +1,33 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} -p 2200 >> ~/.ssh/known_hosts
+
+      - name: Rsync wp-content to VPS
+        run: |
+          rsync -avz -e "ssh -p 2200" \
+            ./plugins/ \
+            ./themes/ \
+            ./uploads/ \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/html/wp-content/
+
+      - name: Flush cache & rewrite on VPS
+        run: |
+          ssh -p 2200 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "docker compose exec wordpress bash -lc 'wp cache flush --allow-root && wp rewrite flush --hard --allow-root'"
