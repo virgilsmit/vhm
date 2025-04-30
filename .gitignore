@@ -1,0 +1,9 @@
+# Docker data
+db_data/
+# WordPress core (we versie‐eren alleen wp-content)
+!/wp-content/
+wp-core/
+# Logs, OS-bestanden
+*.log
+*.env
+.DS_Store
