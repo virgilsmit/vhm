@@ -24,22 +24,22 @@ jobs:
             >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      # 3) Sanity‐check: docker build
+      # 3) Sanity-check: Docker image bouwen
       - name: Build Docker image (sanity)
         run: docker build . -t vhm-wordpress
 
-      # 4) Maak dirs aan + zet rechten op UID:GID 1000:1000
+      # 4) Maak remote dirs aan & zet rechten (UID:GID 1000:1000)
       - name: Ensure remote wp-content dirs and permissions
         run: |
           ssh -o StrictHostKeyChecking=no \
               -i ~/.ssh/id_rsa -p 2200 \
               vsm@${{ secrets.VPS_HOST }} \
               "sudo mkdir -p /home/vhm/public_html/wp-content/plugins \
-                            /home/vhm/public_html/wp-content/themes \
-                            /home/vhm/public_html/wp-content/uploads \
-                            /home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations; \
-               sudo chown -R 1000:1000 /home/vhm/public_html/wp-content; \
-               sudo chmod -R 775 /home/vhm/public_html/wp-content"
+                                 /home/vhm/public_html/wp-content/themes \
+                                 /home/vhm/public_html/wp-content/uploads \
+                                 /home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations && \
+               sudo chown -R 1000:1000 /home/vhm/public_html/wp-content && \
+               sudo chmod -R 775   /home/vhm/public_html/wp-content"
 
       # 5) Rsync wp-content
       - name: Rsync wp-content to VPS
@@ -49,7 +49,7 @@ jobs:
             ./wp-content/ \
             vsm@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/
 
-      # 6) Rsync alleen de migrations
+      # 6) Rsync migrations
       - name: Rsync migrations to VPS
         run: |
           rsync -avz --delete \
@@ -57,7 +57,7 @@ jobs:
             ./wp-content/plugins/hardloop-manager/migrations/ \
             vsm@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations/
 
-      # 7) WP-CLI taken op de server
+      # 7) Voer WP-CLI-taken uit
       - name: Run WP-CLI tasks on VPS
         run: |
           ssh -o StrictHostKeyChecking=no \
