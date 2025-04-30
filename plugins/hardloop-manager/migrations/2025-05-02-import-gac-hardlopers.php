@@ -1,50 +1,44 @@
 <?php
-// 2025-05-02-import-gac-hardlopers.php
-// Deze migration importeert rijen uit de oude GAC_hardlopers-tabel
-// en zet ze om in Loper-CPT posts + ACF-veldmeta.
+// 2025-05-03-import-gac-hardlopers.php
 
-if ( ! defined( 'WP_CLI' ) && php_sapi_name() !== 'cli' ) {
-    // alleen draaien via WP-CLI of CI
+if ( ! defined('WP_CLI') && php_sapi_name()!=='cli' ) {
     return;
 }
-
 global $wpdb;
 
-// voorkom dubbele import
-if ( get_option( 'hardloop_manager_imported_gac', false ) ) {
-    WP_CLI::warning( 'GAC hardlopers already imported, skipping.' );
+// Skip if already imported
+if ( get_option('hardloop_manager_imported_gac', false) ) {
+    WP_CLI::warning('Import already run, skipping.');
     return;
 }
 
-// gebruik exact de oude tabelnaam
+// Your old table name
 $old_table = 'GAC_hardlopers';
 
+// Fetch all rows
 $rows = $wpdb->get_results( "SELECT * FROM `{$old_table}`" );
 
 if ( empty( $rows ) ) {
     WP_CLI::success( 'No rows found in ' . $old_table );
-    update_option( 'hardloop_manager_imported_gac', true );
+    update_option('hardloop_manager_imported_gac', true);
     return;
 }
 
 foreach ( $rows as $r ) {
-
-    // post title op basis van voornaam + achternaam
-    $title = trim( (string) $r->voornaam . ' ' . (string) $r->achternaam );
-
-    $post_id = wp_insert_post( [
+    // Build post title
+    $title = trim("{$r->voornaam} {$r->achternaam}");
+    $pid   = wp_insert_post([
         'post_type'   => 'loper',
         'post_title'  => $title,
         'post_status' => 'publish',
-    ] );
-
-    if ( is_wp_error( $post_id ) ) {
-        WP_CLI::warning( 'Could not insert loper for old ID ' . $r->id );
+    ]);
+    if ( is_wp_error($pid) ) {
+        WP_CLI::warning("Could not insert loper for old ID {$r->id}");
         continue;
     }
 
-    // mappen van old-kolom naar ACF-veld-name
-    $meta_map = [
+    // Map old columns → ACF field names
+    $map = [
         'voornaam'            => 'voornaam',
         'achternaam'          => 'achternaam',
         'email'               => 'email',
@@ -57,22 +51,29 @@ foreach ( $rows as $r ) {
         'blessures'           => 'blessures',
         'opmerkingen'         => 'opmerkingen',
         'trainer_opmerkingen' => 'trainer_opmerkingen',
-        'Niveau'              => 'niveau',
+        'status'              => 'status',
+        'created_at'          => 'created_at',
+        'updated_at'          => 'updated_at',
+        'password'            => 'password',
+        'trainer_email'       => 'trainer_email',
         'actief'              => 'actief',
-        // datum-velden, let op formaat in oude tabel (YYYY-MM-DD of anders)
         'Gestart'             => 'gestart',
         'Gestopt'             => 'gestopt',
     ];
 
-    foreach ( $meta_map as $col => $field_name ) {
+    foreach ( $map as $col => $field ) {
         if ( isset( $r->$col ) ) {
-            update_field( $field_name, $r->$col, $post_id );
+            $val = $r->$col;
+            // Update ACF field
+            update_field( $field, $val, $pid );
+            // Fallback to post_meta
+            update_post_meta( $pid, $field, $val );
         }
     }
 
-    WP_CLI::log( "Imported loper “{$title}” (old ID {$r->id}) as post {$post_id}" );
+    WP_CLI::log("Imported “{$title}” (old ID {$r->id}) as post {$pid}");
 }
 
-// markeer als gedaan, zodat bij een retry niet nogmaals wordt geïmporteerd
-update_option( 'hardloop_manager_imported_gac', true );
-WP_CLI::success( 'Imported ' . count( $rows ) . ' hardlopers from GAC.' );
+// Mark as done
+update_option('hardloop_manager_imported_gac', true);
+WP_CLI::success('Imported ' . count($rows) . ' hardlopers.');
