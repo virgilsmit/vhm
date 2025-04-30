@@ -35,10 +35,15 @@ jobs:
           ENDSSH
 
       - name: Rsync wp-content to VPS
-        run: bash -c "rsync -avz --delete -e 'ssh -i ~/.ssh/id_rsa -p 2200' ./wp-content/ vsm@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/"
+        run: >
+          rsync -avz --delete -e "ssh -i ~/.ssh/id_rsa -p 2200"
+          ./wp-content/ vsm@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/
 
       - name: Rsync migrations to VPS
-        run: bash -c "rsync -avz --delete -e 'ssh -i ~/.ssh/id_rsa -p 2200' ./wp-content/plugins/hardloop-manager/migrations/ vsm@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations/"
+        run: >
+          rsync -avz --delete -e "ssh -i ~/.ssh/id_rsa -p 2200"
+          ./wp-content/plugins/hardloop-manager/migrations/
+          vsm@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations/
 
       - name: Run WP-CLI tasks on VPS
         run: |
