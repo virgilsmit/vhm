@@ -2,8 +2,7 @@ name: Deploy to VPS
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -18,61 +17,47 @@ jobs:
       run: |
         mkdir -p ~/.ssh
         chmod 700 ~/.ssh
-        # decode your Base64-encoded private key into id_rsa
         printf '%s' "${{ secrets.VPS_SSH_KEY_B64 }}" | tr -d '\r' | base64 -d > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
-        # add the host to known_hosts
         ssh-keyscan -p 2200 -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
         chmod 644 ~/.ssh/known_hosts
 
-    - name: Build Docker image locally (sanity check)
+    - name: Build Docker image (sanity)
       run: docker build . -t vhm-wordpress
 
-    - name: Ensure remote wp-content directories (with sudo)
+    - name: Ensure remote wp-content directories (sudo)
       run: |
-        ssh -o StrictHostKeyChecking=no \
-            -i ~/.ssh/id_rsa -p 2200 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash << 'ENDSSH'
-          set -e
-          sudo mkdir -p /home/vhm/public_html/wp-content/plugins
-          sudo mkdir -p /home/vhm/public_html/wp-content/themes
-          sudo mkdir -p /home/vhm/public_html/wp-content/uploads
-          sudo mkdir -p /home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations
-          sudo chown -R vsm:vsm /home/vhm/public_html/wp-content
-          sudo chmod -R 775 /home/vhm/public_html/wp-content
+        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} sudo bash -eux << 'ENDSSH'
+          mkdir -p /home/vhm/public_html/wp-content/plugins
+          mkdir -p /home/vhm/public_html/wp-content/themes
+          mkdir -p /home/vhm/public_html/wp-content/uploads
+          mkdir -p /home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations
+          chown -R vsm:vsm /home/vhm/public_html/wp-content
+          chmod -R 775 /home/vhm/public_html/wp-content
         ENDSSH
 
     - name: Rsync wp-content to VPS
       run: |
-        rsync -avz \
-          --delete \
-          --exclude='.git/' \
-          --exclude='.github/' \
+        rsync -avz --delete \
           -e "ssh -i ~/.ssh/id_rsa -p 2200" \
           ./wp-content/ \
           vsm@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/
 
     - name: Rsync migrations to VPS
       run: |
-        rsync -avz \
-          --delete \
+        rsync -avz --delete \
           -e "ssh -i ~/.ssh/id_rsa -p 2200" \
           ./wp-content/plugins/hardloop-manager/migrations/ \
           vsm@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations/
 
     - name: Run WP-CLI tasks on VPS
       run: |
-        ssh -o StrictHostKeyChecking=no \
-            -i ~/.ssh/id_rsa -p 2200 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash << 'ENDSSH'
-          set -e
+        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash -eux << 'ENDSSH'
           cd /home/vhm/public_html
-
-          # ensure plugin active & permalinks flushed
           wp plugin activate hardloop-manager --allow-root || true
           wp rewrite flush --hard --allow-root
-
-          # run the import migration
           wp option delete hardloop_manager_imported_gac --allow-root || true
           wp eval-file wp-content/plugins/hardloop-manager/migrations/2025-05-02-import-gac-hardlopers.php --allow-root
-        ENDSSH# dummy trigger wo 30 apr 2025 22:05:29 CEST
+        ENDSSH
