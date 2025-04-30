@@ -2,7 +2,8 @@ name: Deploy to VPS
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -17,10 +18,10 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          # Decode your Base64-encoded private key into id_rsa
+          # Decode jouw Base64-key in id_rsa
           printf '%s' "${{ secrets.VPS_SSH_KEY_B64 }}" | tr -d '\r' | base64 -d > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          # Trust the VPS host key on port 2200
+          # Vertrouw de VPS host-key op poort 2200
           ssh-keyscan -p 2200 -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
@@ -36,8 +37,7 @@ jobs:
             mkdir -p /home/vhm/public_html/wp-content/themes
             mkdir -p /home/vhm/public_html/wp-content/uploads
             mkdir -p /home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations
-            # chown to the actual user/group on the VPS
-            chown -R vhm:vhm /home/vhm/public_html/wp-content
+            chown -R vsm:vsm /home/vhm/public_html/wp-content
             chmod -R 775 /home/vhm/public_html/wp-content
           ENDSSH
 
