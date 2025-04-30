@@ -1,9 +1,10 @@
 <?php
 // 2025-05-02-import-gac-hardlopers.php
-// Deze migration importeert rijen uit de oude gac_hardlopers-tabel
+// Deze migration importeert rijen uit de oude GAC_hardlopers-tabel
 // en zet ze om in Loper-CPT posts + ACF-veldmeta.
 
 if ( ! defined( 'WP_CLI' ) && php_sapi_name() !== 'cli' ) {
+    // alleen draaien via WP-CLI of CI
     return;
 }
 
@@ -15,8 +16,10 @@ if ( get_option( 'hardloop_manager_imported_gac', false ) ) {
     return;
 }
 
-$old_table = $wpdb->prefix . 'gac_hardlopers';
-$rows = $wpdb->get_results( "SELECT * FROM {$old_table}" );
+// gebruik exact de oude tabelnaam
+$old_table = 'GAC_hardlopers';
+
+$rows = $wpdb->get_results( "SELECT * FROM `{$old_table}`" );
 
 if ( empty( $rows ) ) {
     WP_CLI::success( 'No rows found in ' . $old_table );
@@ -25,19 +28,22 @@ if ( empty( $rows ) ) {
 }
 
 foreach ( $rows as $r ) {
-    // maak een nieuwe Loper post
-    $post_id = wp_insert_post([
+
+    // post title op basis van voornaam + achternaam
+    $title = trim( (string) $r->voornaam . ' ' . (string) $r->achternaam );
+
+    $post_id = wp_insert_post( [
         'post_type'   => 'loper',
-        'post_title'  => trim($r->voornaam . ' ' . $r->achternaam),
+        'post_title'  => $title,
         'post_status' => 'publish',
-    ]);
+    ] );
 
     if ( is_wp_error( $post_id ) ) {
         WP_CLI::warning( 'Could not insert loper for old ID ' . $r->id );
         continue;
     }
 
-    // mappen van kolommen naar ACF-veld-namen
+    // mappen van old-kolom naar ACF-veld-name
     $meta_map = [
         'voornaam'            => 'voornaam',
         'achternaam'          => 'achternaam',
@@ -53,7 +59,7 @@ foreach ( $rows as $r ) {
         'trainer_opmerkingen' => 'trainer_opmerkingen',
         'Niveau'              => 'niveau',
         'actief'              => 'actief',
-        // date fields
+        // datum-velden, let op formaat in oude tabel (YYYY-MM-DD of anders)
         'Gestart'             => 'gestart',
         'Gestopt'             => 'gestopt',
     ];
@@ -64,9 +70,9 @@ foreach ( $rows as $r ) {
         }
     }
 
-    WP_CLI::log( "Imported loper {$r->voornaam} {$r->achternaam} (old ID {$r->id}) as post {$post_id}" );
+    WP_CLI::log( "Imported loper “{$title}” (old ID {$r->id}) as post {$post_id}" );
 }
 
-// markeer als gedaan
+// markeer als gedaan, zodat bij een retry niet nogmaals wordt geïmporteerd
 update_option( 'hardloop_manager_imported_gac', true );
 WP_CLI::success( 'Imported ' . count( $rows ) . ' hardlopers from GAC.' );
