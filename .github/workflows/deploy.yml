@@ -18,7 +18,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up SSH key
+      - name: Set up SSH key and known_hosts
         shell: bash
         run: |
           mkdir -p ~/.ssh
@@ -28,7 +28,7 @@ jobs:
           printf '%s' "${{ secrets.VPS_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
-          # trust the host on port 2200
+          # scan and trust host key on port 2200
           ssh-keyscan -p 2200 -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
@@ -41,7 +41,7 @@ jobs:
 
       - name: Ensure remote wp-content directories
         run: |
-          ssh -i ~/.ssh/id_rsa -p 2200 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash << 'ENDSSH'
             set -e
             mkdir -p /home/vhm/public_html/wp-content/plugins
             mkdir -p /home/vhm/public_html/wp-content/themes
@@ -53,7 +53,7 @@ jobs:
 
       - name: Rsync wp-content to VPS
         run: |
-          rsync -avz -e "ssh -i ~/.ssh/id_rsa -p 2200" \
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200" \
             ./plugins/ \
             ./themes/ \
             ./uploads/ \
@@ -62,7 +62,7 @@ jobs:
 
       - name: Flush cache & rewrite on VPS
         run: |
-          ssh -i ~/.ssh/id_rsa -p 2200 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
             "cd /home/vhm/public_html && wp cache flush --allow-root && wp rewrite flush --hard --allow-root"
 
   db-migrate:
@@ -73,21 +73,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up SSH key
+      - name: Set up SSH key and known_hosts
         shell: bash
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-
           printf '%s' "${{ secrets.VPS_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-
           ssh-keyscan -p 2200 -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
       - name: Run DB migrations on VPS
         run: |
-          ssh -i ~/.ssh/id_rsa -p 2200 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash << EOF
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash << EOF
             set -euo pipefail
             cd /home/vhm/public_html
 
