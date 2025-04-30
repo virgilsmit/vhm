@@ -17,15 +17,17 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
+          # Decode your Base64‐encoded private key into id_rsa
           printf '%s' "${{ secrets.VPS_SSH_KEY_B64 }}" | tr -d '\r' | base64 -d > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
+          # Trust the VPS host key on port 2200
           ssh-keyscan -p 2200 -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
       - name: Build Docker image (sanity)
         run: docker build . -t vhm-wordpress
 
-      - name: Ensure remote wp-content dirs (sudo & correct owner)
+      - name: Ensure remote wp-content dirs (sudo & numeric chown)
         run: |
           ssh -o StrictHostKeyChecking=no \
               -i ~/.ssh/id_rsa -p 2200 \
@@ -34,8 +36,8 @@ jobs:
             mkdir -p /home/vhm/public_html/wp-content/themes
             mkdir -p /home/vhm/public_html/wp-content/uploads
             mkdir -p /home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations
-            # only set the owner—leave group as-is
-            chown -R vsm /home/vhm/public_html/wp-content
+            # Use numeric UID:GID so Actions doesn't mask it
+            chown -R 1000:1000 /home/vhm/public_html/wp-content
             chmod -R 775 /home/vhm/public_html/wp-content
           ENDSSH
 
@@ -44,7 +46,7 @@ jobs:
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/id_rsa -p 2200" \
             ./wp-content/ \
-            vsm@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/
+            vsm@${{ secrets.VPS_HOST }}:/home/vvm/public_html/wp-content/
 
       - name: Rsync migrations to VPS
         run: |
