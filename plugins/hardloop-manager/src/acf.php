@@ -20,9 +20,11 @@ acf_add_local_field_group([
     [ 'key'=>'field_opmerkingen','label'=>'Opmerkingen','name'=>'opmerkingen','type'=>'textarea' ],
     [ 'key'=>'field_trainer_opmerkingen','label'=>'Trainer opmerkingen','name'=>'trainer_opmerkingen','type'=>'textarea' ],
     [ 'key'=>'field_niveau','label'=>'Niveau','name'=>'niveau','type'=>'select','choices'=>['beginner'=>'Beginner','gevorderd'=>'Gevorderd','expert'=>'Expert'] ],
-    [ 'key'=>'field_actief','label'=>'Actief','name'=>'actief','type'=>'true_false','ui'=>1 ],
-    [ 'key'=>'field_gestart','label'=>'Gestart','name'=>'gestart','type'=>'true_false','ui'=>1 ],
-  ],
+    [ 'key'=>'field_actief',   'label'=>'Actief',   'name'=>'actief',   'type'=>'true_false',    'ui'=>1 ],
+    +  [ 'key'=>'field_gestart',  'label'=>'Gestart datum','name'=>'gestart', 'type'=>'date_picker',   'display_format'=>'d/m/Y','return_format'=>'Y-m-d' ],
+    +  [ 'key'=>'field_gestopt',  'label'=>'Gestopt datum','name'=>'gestopt', 'type'=>'date_picker',   'display_format'=>'d/m/Y','return_format'=>'Y-m-d' ],
+    
+ ],
   'location' => [[ [ 'param'=>'post_type','operator'=>'==','value'=>'loper' ] ]],
   'menu_order'=>0,'position'=>'normal','style'=>'default','label_placement'=>'top','instruction_placement'=>'label',
 ]);
