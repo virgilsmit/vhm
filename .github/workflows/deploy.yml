@@ -2,7 +2,8 @@ name: Deploy to VPS
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -25,10 +26,11 @@ jobs:
     - name: Build Docker image (sanity)
       run: docker build . -t vhm-wordpress
 
-    - name: Ensure remote wp-content directories (sudo)
+    - name: Ensure remote wp-content dirs (sudo & correct owner)
       run: |
-        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} sudo bash -eux << 'ENDSSH'
+        ssh -o StrictHostKeyChecking=no \
+            -i ~/.ssh/id_rsa -p 2200 \
+            vsm@${{ secrets.VPS_HOST }} sudo bash -eux << 'ENDSSH'
           mkdir -p /home/vhm/public_html/wp-content/plugins
           mkdir -p /home/vhm/public_html/wp-content/themes
           mkdir -p /home/vhm/public_html/wp-content/uploads
@@ -53,8 +55,9 @@ jobs:
 
     - name: Run WP-CLI tasks on VPS
       run: |
-        ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} bash -eux << 'ENDSSH'
+        ssh -o StrictHostKeyChecking=no \
+            -i ~/.ssh/id_rsa -p 2200 \
+            vsm@${{ secrets.VPS_HOST }} bash -eux << 'ENDSSH'
           cd /home/vhm/public_html
           wp plugin activate hardloop-manager --allow-root || true
           wp rewrite flush --hard --allow-root
