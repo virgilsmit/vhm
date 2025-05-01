@@ -10,10 +10,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1) Check out de code
       - uses: actions/checkout@v4
 
-      # 2) SSH-key instellen
       - name: Set up SSH key
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -23,25 +21,22 @@ jobs:
           ssh-keyscan -p 2200 -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      # 3) Sanity-check: Docker image bouwen
       - name: Build Docker image (sanity)
         run: docker build . -t vhm-wordpress
 
-      # 4) Maak wp-content dirs aan & zet rechten (UID:GID 1000:1000) via here-doc
       - name: Ensure remote wp-content dirs and permissions
         run: |
           ssh -o StrictHostKeyChecking=no \
-            -i ~/.ssh/id_rsa -p 2200 \
-            vsm@${{ secrets.VPS_HOST }} << 'EOF'
-sudo mkdir -p /home/vhm/public_html/wp-content/plugins
-sudo mkdir -p /home/vhm/public_html/wp-content/themes
-sudo mkdir -p /home/vhm/public_html/wp-content/uploads
-sudo mkdir -p /home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations
-sudo chown -R 1000:1000 /home/vhm/public_html/wp-content
-sudo chmod -R 775 /home/vhm/public_html/wp-content
-EOF
+              -i ~/.ssh/id_rsa -p 2200 \
+              vsm@${{ secrets.VPS_HOST }} << 'EOF'
+          sudo mkdir -p /home/vhm/public_html/wp-content/plugins
+          sudo mkdir -p /home/vhm/public_html/wp-content/themes
+          sudo mkdir -p /home/vhm/public_html/wp-content/uploads
+          sudo mkdir -p /home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations
+          sudo chown -R vsm:vsm /home/vhm/public_html/wp-content
+          sudo chmod -R 775   /home/vhm/public_html/wp-content
+          EOF
 
-      # 5) Rsync wp-content
       - name: Rsync wp-content to VPS
         run: |
           rsync -avz --delete \
@@ -49,7 +44,6 @@ EOF
             ./wp-content/ \
             vsm@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/
 
-      # 6) Rsync migrations
       - name: Rsync migrations to VPS
         run: |
           rsync -avz --delete \
@@ -57,15 +51,14 @@ EOF
             ./wp-content/plugins/hardloop-manager/migrations/ \
             vsm@${{ secrets.VPS_HOST }}:/home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations/
 
-      # 7) Voer WP-CLI taken uit
       - name: Run WP-CLI tasks on VPS
         run: |
           ssh -o StrictHostKeyChecking=no \
-            -i ~/.ssh/id_rsa -p 2200 \
-            vsm@${{ secrets.VPS_HOST }} << 'EOF'
-cd /home/vhm/public_html
-wp plugin activate hardloop-manager --allow-root || true
-wp rewrite flush --hard --allow-root
-wp option delete hardloop_manager_imported_gac --allow-root || true
-wp eval-file wp-content/plugins/hardloop-manager/migrations/2025-05-02-import-gac-hardlopers.php --allow-root
-EOF
+              -i ~/.ssh/id_rsa -p 2200 \
+              vsm@${{ secrets.VPS_HOST }} << 'EOF'
+          cd /home/vhm/public_html
+          wp plugin activate hardloop-manager --allow-root || true
+          wp rewrite flush --hard --allow-root
+          wp option delete hardloop_manager_imported_gac --allow-root || true
+          wp eval-file wp-content/plugins/hardloop-manager/migrations/2025-05-02-import-gac-hardlopers.php --allow-root
+          EOF
