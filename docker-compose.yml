@@ -1,3 +1,4 @@
+# docker-compose.yml
 services:
   db:
     image: mysql:8
@@ -11,7 +12,7 @@ services:
       - db_data:/var/lib/mysql
 
   wordpress:
-    build: .                      # ← build our Dockerfile
+    build: .
     depends_on:
       - db
     ports:
