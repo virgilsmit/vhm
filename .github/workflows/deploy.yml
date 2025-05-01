@@ -15,8 +15,7 @@ jobs:
       - name: Set up SSH key
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY_B64 }}" \
-            | tr -d '\r' | base64 -d > ~/.ssh/id_rsa
+          echo "${{ secrets.VPS_SSH_KEY_B64 }}" | tr -d '\r' | base64 -d > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -p 2200 -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
@@ -26,9 +25,8 @@ jobs:
 
       - name: Ensure remote wp-content dirs and permissions
         run: |
-          ssh -o StrictHostKeyChecking=no \
-              -i ~/.ssh/id_rsa -p 2200 \
-              vsm@${{ secrets.VPS_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 \
+            vsm@${{ secrets.VPS_HOST }} << 'EOF'
           sudo mkdir -p /home/vhm/public_html/wp-content/plugins
           sudo mkdir -p /home/vhm/public_html/wp-content/themes
           sudo mkdir -p /home/vhm/public_html/wp-content/uploads
@@ -53,9 +51,8 @@ jobs:
 
       - name: Run WP-CLI tasks on VPS
         run: |
-          ssh -o StrictHostKeyChecking=no \
-              -i ~/.ssh/id_rsa -p 2200 \
-              vsm@${{ secrets.VPS_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 \
+            vsm@${{ secrets.VPS_HOST }} << 'EOF'
           cd /home/vhm/public_html
           wp plugin activate hardloop-manager --allow-root || true
           wp rewrite flush --hard --allow-root
