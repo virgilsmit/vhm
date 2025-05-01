@@ -1,5 +1,5 @@
 name: Deploy to VPS
-# vs
+
 on:
   push:
     branches: [ main ]
@@ -13,20 +13,22 @@ jobs:
       # 1) Check out the code
       - uses: actions/checkout@v4
 
-      # 2) Set up SSH key
+      # 2) Set up the SSH key
       - name: Set up SSH key
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY_B64 }}" | tr -d '\r'             | base64 -d > ~/.ssh/id_rsa
+          echo "${{ secrets.VPS_SSH_KEY_B64 }}" \
+            | tr -d '\r' | base64 -d > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -p 2200 -H "${{ secrets.VPS_HOST }}"             >> ~/.ssh/known_hosts
+          ssh-keyscan -p 2200 -H "${{ secrets.VPS_HOST }}" \
+            >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      # 3) Sanity-check: Docker image build
+      # 3) (Optional) Docker build for sanity check
       - name: Build Docker image (sanity)
         run: docker build . -t vhm-wordpress
 
-      # 4) Ensure wp-content directories and permissions
+      # 4) Ensure wp-content dirs & permissions on the VPS
       - name: Ensure remote wp-content dirs and permissions
         run: |
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 \
@@ -34,7 +36,7 @@ jobs:
           mkdir -p /home/vhm/public_html/wp-content/{plugins,themes,uploads}
           mkdir -p /home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations
           chown -R vsm:vsm /home/vhm/public_html/wp-content
-          chmod -R 775   /home/vhm/public_html/wp-content
+          chmod -R 775 /home/vhm/public_html/wp-content
           EOF
 
       # 5) Rsync wp-content to VPS
@@ -61,11 +63,13 @@ jobs:
           cd /home/vhm/public_html
           wp plugin activate hardloop-manager --allow-root || true
           wp rewrite flush --hard --allow-root
-          wp option delete hardloop_manager_imported_gac --allow-root || true
+          # Import GAC Hardlopers via SQL (first migration)
           wp eval-file wp-content/plugins/hardloop-manager/migrations/2025-05-02-import-gac-hardlopers.php --allow-root
+          # Import all runners directly from GAC_hardlopers table
+          wp eval-file wp-content/plugins/hardloop-manager/migrations/2025-05-03-import-all-gac-hardlopers.php --allow-root
           EOF
 
-      # 8) Install ACF plugin (free) on VPS
+      # 8) Ensure ACF plugin is installed & activated on VPS
       - name: Ensure ACF plugin on VPS
         run: |
           ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 \
@@ -73,15 +77,4 @@ jobs:
           cd /home/vhm/public_html
           wp plugin is-installed advanced-custom-fields --allow-root || \
             wp plugin install advanced-custom-fields --activate --allow-root
-          EOF
-
-      # 9) Export & import loper posts on VPS
-      - name: Sync loper posts on VPS
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -p 2200 \
-            vsm@${{ secrets.VPS_HOST }} << 'EOF'
-          cd /home/vhm/public_html
-          wp export --post_type=loper --filename_format=hardlopers.xml --allow-root
-          wp import hardlopers.xml --authors=create --allow-root
-          rm hardlopers.xml
           EOF
