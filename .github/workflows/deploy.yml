@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1) Checkout de code
+      # 1) Check out de code
       - uses: actions/checkout@v4
 
       # 2) SSH-key instellen
@@ -20,11 +20,10 @@ jobs:
           echo "${{ secrets.VPS_SSH_KEY_B64 }}" \
             | tr -d '\r' | base64 -d > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -p 2200 -H "${{ secrets.VPS_HOST }}" \
-            >> ~/.ssh/known_hosts
+          ssh-keyscan -p 2200 -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      # 3) Docker-build als sanity-check
+      # 3) Sanity-check: Docker-build
       - name: Build Docker image (sanity)
         run: docker build . -t vhm-wordpress
 
@@ -34,12 +33,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no \
               -i ~/.ssh/id_rsa -p 2200 \
               vsm@${{ secrets.VPS_HOST }} \
-              "sudo mkdir -p /home/vhm/public_html/wp-content/plugins \
-                            /home/vhm/public_html/wp-content/themes \
-                            /home/vhm/public_html/wp-content/uploads \
-                            /home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations && \
-               sudo chown -R 1000:1000 /home/vhm/public_html/wp-content && \
-               sudo chmod -R 775   /home/vhm/public_html/wp-content"
+              "sudo mkdir -p /home/vhm/public_html/wp-content/plugins /home/vhm/public_html/wp-content/themes /home/vhm/public_html/wp-content/uploads /home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations && sudo chown -R 1000:1000 /home/vhm/public_html/wp-content && sudo chmod -R 775 /home/vhm/public_html/wp-content"
 
       # 5) Rsync wp-content
       - name: Rsync wp-content to VPS
@@ -63,8 +57,4 @@ jobs:
           ssh -o StrictHostKeyChecking=no \
               -i ~/.ssh/id_rsa -p 2200 \
               vsm@${{ secrets.VPS_HOST }} \
-              "cd /home/vhm/public_html && \
-               wp plugin activate hardloop-manager --allow-root || true && \
-               wp rewrite flush --hard --allow-root && \
-               wp option delete hardloop_manager_imported_gac --allow-root || true && \
-               wp eval-file wp-content/plugins/hardloop-manager/migrations/2025-05-02-import-gac-hardlopers.php --allow-root"
+              "cd /home/vhm/public_html && wp plugin activate hardloop-manager --allow-root || true && wp rewrite flush --hard --allow-root && wp option delete hardloop_manager_imported_gac --allow-root || true && wp eval-file wp-content/plugins/hardloop-manager/migrations/2025-05-02-import-gac-hardlopers.php --allow-root"
