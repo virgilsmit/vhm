@@ -8,12 +8,11 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      # 1) Check out de code, inclusief hardlopers.xml
+      # 1) Checkout
       - uses: actions/checkout@v4
 
-      # 2) Stel de SSH-key in
+      # 2) SSH-key instellen
       - name: Set up SSH key
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -24,20 +23,20 @@ jobs:
             >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      # 3) (optioneel) Docker-build als sanity-check
+      # 3) (optioneel) Docker-build sanity-check
       - name: Build Docker image (sanity)
         run: docker build . -t vhm-wordpress
 
-      # 4) Maak wp-content dirs & rechten
+      # 4) Maak wp-content dirs aan & zet rechten
       - name: Ensure remote wp-content dirs and permissions
         run: |
           ssh -o StrictHostKeyChecking=no \
-              -i ~/.ssh/id_rsa -p 2200 \
-              vsm@${{ secrets.VPS_HOST }} << 'EOF'
+            -i ~/.ssh/id_rsa -p 2200 \
+            vsm@${{ secrets.VPS_HOST }} << 'EOF'
           mkdir -p /home/vhm/public_html/wp-content/{plugins,themes,uploads}
           mkdir -p /home/vhm/public_html/wp-content/plugins/hardloop-manager/migrations
           chown -R vsm:vsm /home/vhm/public_html/wp-content
-          chmod -R 775   /home/vhm/public_html/wp-content
+          chmod -R 775 /home/vhm/public_html/wp-content
           EOF
 
       # 5) Rsync wp-content
@@ -60,8 +59,8 @@ jobs:
       - name: Run WP-CLI migrations on VPS
         run: |
           ssh -o StrictHostKeyChecking=no \
-              -i ~/.ssh/id_rsa -p 2200 \
-              vsm@${{ secrets.VPS_HOST }} << 'EOF'
+            -i ~/.ssh/id_rsa -p 2200 \
+            vsm@${{ secrets.VPS_HOST }} << 'EOF'
           cd /home/vhm/public_html
           wp plugin activate hardloop-manager --allow-root || true
           wp rewrite flush --hard --allow-root
@@ -69,34 +68,25 @@ jobs:
           wp eval-file wp-content/plugins/hardloop-manager/migrations/2025-05-02-import-gac-hardlopers.php --allow-root
           EOF
 
-      # 8) Installeer ACF (gratis) op de VPS
+      # 8) Installeer ACF-plugin (gratis)
       - name: Ensure ACF plugin on VPS
         run: |
           ssh -o StrictHostKeyChecking=no \
-              -i ~/.ssh/id_rsa -p 2200 \
-              vsm@${{ secrets.VPS_HOST }} << 'EOF'
+            -i ~/.ssh/id_rsa -p 2200 \
+            vsm@${{ secrets.VPS_HOST }} << 'EOF'
           cd /home/vhm/public_html
           wp plugin is-installed advanced-custom-fields --allow-root || \
             wp plugin install advanced-custom-fields --activate --allow-root
           EOF
 
-      # 9) **Import je lokaal geëxporteerde hardlopers.xml**
-      - name: Import hardlopers export on VPS
+      # 9) Export & import loper-posts volledig op de VPS
+      - name: Export & import loper posts on VPS
         run: |
-          # 9.1 Kopieer hardlopers.xml naar de VPS
-          scp -P 2200 -i ~/.ssh/id_rsa \
-            hardlopers.xml \
-            vsm@${{ secrets.VPS_HOST }}:/home/vhm/public_html/
-          # 9.2 Op de VPS: import en opruimen
           ssh -o StrictHostKeyChecking=no \
-              -i ~/.ssh/id_rsa -p 2200 \
-              vsm@${{ secrets.VPS_HOST }} << 'EOF'
+            -i ~/.ssh/id_rsa -p 2200 \
+            vsm@${{ secrets.VPS_HOST }} << 'EOF'
           cd /home/vhm/public_html
-          # Zorg dat de WP Importer plugin aanwezig is
-          wp plugin is-installed wordpress-importer --allow-root || \
-            wp plugin install wordpress-importer --activate --allow-root
-          # Importeer hardlopers.xml
+          wp export --post_type=loper --filename_format=hardlopers.xml --allow-root
           wp import hardlopers.xml --authors=create --allow-root
-          # Ruim het tijdelijke XML-bestand op
           rm hardlopers.xml
           EOF
